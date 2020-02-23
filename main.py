@@ -41,7 +41,7 @@ def get_voice(message):
         os.chdir(path)
         with open('voices.json', "r") as json_file:
             json_data = json.load(json_file)
-        json_data['to_check'].append(str(message.from_user.id) + '_' + str(message.message_id))
+        json_data['to_check'].append('v' + str(message.from_user.id) + '_' + str(message.message_id))
         with open('voices.json', 'w') as json_file:
             json.dump(json_data, json_file)
         bot.send_message(message.from_user.id, message_templates[5])
@@ -122,4 +122,74 @@ def listen(message):
     else:
         bot.send_message(message.from_user.id, message_templates[11])
 
+@bot.message_handler(commands = ['pull'])
+def pull(message):
+    global ADMINS
+    if message.from_user.id in ADMINS:
+        with open('voices.json', 'r') as json_file:
+            json_data = json.load(json_file)
+        path = os.getcwd()
+        new_path = os.path.join(path, r'voices')
+        if (len(json_data['to_check']) > 0):
+            if message.from_user.id not in [i['id'] for i in json_data['is_checking']]:
+                file_to_check = json_data['to_check'].pop(0)
+                json_data['is_checking'].append({'file':file_to_check, 'id': message.from_user.id})
+                with open('voices.json', 'w') as json_file:
+                    json.dump(json_data, json_file)
+                keyboard = telebot.types.InlineKeyboardMarkup()
+                keys = [
+                    telebot.types.InlineKeyboardButton(text='✅ Подтвердить', callback_data='confirm' + '_' +str(message.from_user.id)),
+                    telebot.types.InlineKeyboardButton(text='❌ Удалить', callback_data='delete' + '_' +str(message.from_user.id)),
+                    telebot.types.InlineKeyboardButton(text='⬆️ Отправить на перепроверку', callback_data='to-check' + '_' +str(message.from_user.id))
+                ]
+                for i in range(len(keys)):
+                    keyboard.row(keys[i])
+                os.chdir(new_path)
+                bot.send_voice(message.from_user.id, open(file_to_check + '.ogg', 'rb'), reply_markup=keyboard)
+                os.chdir(path)
+            else:
+                bot.send_message(message.from_user.id, message_templates[12])
+        else:
+            bot.send_message(message.from_user.id, message_templates[11])         
+    else:
+        bot.send_message(message.from_user.id, message_templates[6])
+
+@bot.callback_query_handler(func=lambda call: True)
+def callback_worker(call):
+    print(call.data)
+    task = call.data.split('_')[0]
+    user_id = int(call.data.split('_')[1])
+    if task == 'confirm':
+        with open('voices.json', 'r') as json_file:
+            json_data = json.load(json_file)
+        for i in range(len(json_data['is_checking'])):
+            if json_data['is_checking'][i]['id'] == user_id:
+                confirmed_file = json_data['is_checking'][i]['file']
+                json_data['is_checking'].pop(i)
+                break
+        json_data['checked'].append(confirmed_file)
+        with open('voices.json', 'w') as json_file:
+            json.dump(json_data, json_file)
+        bot.send_message(user_id, message_templates[13])
+    if task == 'delete':
+        with open('voices.json', 'r') as json_file:
+            json_data = json.load(json_file)
+        for i in range(len(json_data['is_checking'])):
+            if json_data['is_checking'][i]['id'] == user_id:
+                json_data['is_checking'].pop(i)
+                break
+        with open('voices.json', 'w') as json_file:
+            json.dump(json_data, json_file)
+        bot.send_message(user_id, message_templates[14])
+    if task == 'to-check':
+        with open('voices.json', 'r') as json_file:
+            json_data = json.load(json_file)
+        for i in range(len(json_data['is_checking'])):
+            if json_data['is_checking'][i]['id'] == user_id:
+                to_check_file = json_data['is_checking'].pop(i)['file']
+                break
+        json_data['to_check'].append(to_check_file)
+        with open('voices.json', 'w') as json_file:
+            json.dump(json_data, json_file)
+        bot.send_message(user_id, message_templates[15])
 bot.polling(none_stop=True, interval=0)
