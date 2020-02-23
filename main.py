@@ -1,7 +1,9 @@
 import telebot
-from config import API_KEY, message_templates
+from config import API_KEY
+from templates import message_templates
 import json
 import os
+from random import shuffle
 
 bot = telebot.TeleBot(API_KEY)
 
@@ -37,7 +39,7 @@ def get_voice(message):
         file_info = bot.get_file(message.voice.file_id)
         downloaded_file = bot.download_file(file_info.file_path)
         os.chdir(new_path)
-        src = str(message.from_user.id) + '_' + str(message.message_id) + '.ogg'
+        src = 'v' + str(message.from_user.id) + '_' + str(message.message_id) + '.ogg'
         with open(src, 'wb') as new_file:
             new_file.write(downloaded_file)
         os.chdir(path)
@@ -108,5 +110,21 @@ def delete_admin(message):
                 bot.send_message(message.from_user.id, message_templates[10])
         else:
             bot.send_message(message.from_user.id, message_templates[9])
+
+@bot.message_handler(commands = ['listen'])
+def listen(message):
+    with open('voices.json', 'r') as json_file:
+        json_data = json.load(json_file)
+    if len(json_data['checked']) > 0:
+        shuffle(json_data['checked'])
+        audio_id = json_data['checked'][0]
+        print(audio_id)
+        path = os.getcwd()
+        new_path = os.path.join(path, r'voices')
+        os.chdir(new_path)
+        bot.send_voice(message.from_user.id, open(audio_id + '.ogg', 'rb'))
+        os.chdir(path)
+    else:
+        bot.send_message(message.from_user.id, message_templates[11])
 
 bot.polling(none_stop=True, interval=0)
