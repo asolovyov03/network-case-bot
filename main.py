@@ -5,32 +5,28 @@ import json
 import os
 from random import shuffle
 
+ADMINS = []
 bot = telebot.TeleBot(API_KEY)
 
-def isAdmin(username, message):
-    with open("admins.json", "r") as json_file:
-        json_data = json.load(json_file)
-    for i in range(len(json_data)):
-        if username == json_data[i]['username']:
-            if 'id' not in json_data[i]:
-                json_data[i].update({'id': message.from_user.id})
-                with open('admins.json', 'w') as json_file:
-                    json.dump(json_data, json_file)
-            return True
-    return False
 
 @bot.message_handler(commands = ['start'])
 def start(message):
     bot.send_message(message.from_user.id, message_templates[0])
+
+
 @bot.message_handler(commands = ['help'])
 def help(message):
-    if isAdmin(message.from_user.username, message):
+    if message.from_user.id in ADMINS:
         bot.send_message(message.from_user.id, message_templates[2])
     else:
         bot.send_message(message.from_user.id, message_templates[1])
+
+
 @bot.message_handler(commands = ['add'])
 def add(message):
     bot.send_message(message.from_user.id, message_templates[3])
+
+
 @bot.message_handler(content_types = ['voice'])
 def get_voice(message):
     path = os.getcwd()
@@ -52,64 +48,63 @@ def get_voice(message):
     else:
         bot.send_message(message.from_user.id, message_templates[4])
 
+
+# I'm not sure this handler works, judging by gh readme this should work
 @bot.message_handler(commands = ['add_admin'])
 def bot_add_admin(message):
-    if isAdmin(message.from_user.username, message):
-        msg = bot.send_message(message.from_user.id, message_templates[7])
-        bot.register_next_step_handler(msg, add_admin)
+    global ADMINS
+    if message.from_user.id in ADMINS:
+        # message_templates[7] was used here somewhere
+        ids = message.text.split()[1:] # "/add_admin 242 4235326" -> ["242", "4235326"]
+        try:
+            with open('admins.md', 'a') as f:
+                for i in ids:
+                    ADMINS.append(int(i))
+                    f.write(i + "\n")
+            success = "ADMIN(S) " + str(ids) + " succesfully added by " + message.from_user.username
+            bot.send_message(message.from_user.id, success)
+            print(success)
+        except:
+            bot.send_message(message.from_user.id, "You provided incorrect TELEGRAM ID (should be a number)")
     else:
         bot.send_message(message.from_user.id, message_templates[6])
 
-def add_admin(message):
-    if message.text == "/cancel":
-        bot.send_message(message.from_user.id, message_templates[8])
-    else:
-        admins = message.text.split()
-        message_template = '''Вот список тех, кого вы назначили админом:
-'''
-        for i in range(len(admins)):
-            if admins[i][0] == '@':
-                admins[i] = admins[i][1:len(admins[i])]
-            message_template += "@" + admins[i] + '\n'
-        with open('admins.json', 'r') as json_file:
-            json_data = json.load(json_file)
-        for i in range(len(admins)):
-            json_data.append({'username':admins[i]})
-        with open('admins.json', 'w') as json_file:
-            json.dump(json_data, json_file)
-        bot.send_message(message.from_user.id, message_template)
+
+@bot.message_handler(commands = ['admin_list'])
+def get_admin_list(message):
+    if message.from_user.id in ADMINS:
+        bot.send_message(message.from_user.id, str(ADMINS))
+
 
 @bot.message_handler(commands = ['delete_admin'])
 def bot_delete_admin(message):
-    if isAdmin(message.from_user.username, message):
-        with open('admins.json', 'r') as json_file:
-            json_data = json.load(json_file)
-        message_template = 'Вот список действующих админов:\n'
-        for i in range(len(json_data)):
-            message_template += '@' + json_data[i]['username'] + ' - /' + str(i + 1) + '\n'
-        message_template += '''Выберите того, кого хотите удалить (чтобы удалить нескольких, вызовите /delete_admin несколько раз)
-Для отмены действия используйте /cancel'''
-        msg = bot.send_message(message.from_user.id, message_template)
-        bot.register_next_step_handler(msg, delete_admin)
+    global ADMINS
+    if message.from_user.id in ADMINS:
+        try:
+            tg_id = int(message.text.split()[-1])
+        except:
+            bot.send_message(message.from_user.id, "You provided incorrect TELEGRAM ID (should be a number)")
+            return
+        if tg_id in ADMINS:
+            ADMINS.remove(tg_id)
+            with open('admins.md', 'w') as f:
+                for admin in ADMINS:
+                    f.write(str(admin) + "\n")
+            success = "ADMIN " + str(tg_id) + " succesfully deleted by " + message.from_user.username
+            bot.send_message(message.from_user.id, success)
+            print(success)
+        else:
+            bot.send_message(message.from_user.id, "There's no such user in admin list (use /admin_list to check the list)")
     else:
         bot.send_message(message.from_user.id, message_templates[6])
 
-def delete_admin(message):
-    with open('admins.json', 'r') as json_file:
-        json_data = json.load(json_file)
-    if message.text == '/cancel':
-        bot.send_message(message.from_user.id, message_templates[8])
-    else:
-        if (message.text[0] == "/") and (message.text[1:len(message.text)].isdigit()):
-            if (int(message.text[1:len(message.text)]) <= len(json_data)):
-                deleted_username = json_data.pop(int(message.text[1:len(message.text)]) - 1)['username']
-                with open('admins.json', 'w') as json_file:
-                    json.dump(json_data, json_file)
-                bot.send_message(message.from_user.id, '@' + deleted_username + ' больше не админ')
-            else:
-                bot.send_message(message.from_user.id, message_templates[10])
-        else:
-            bot.send_message(message.from_user.id, message_templates[9])
+
+with open('admins.md', 'r') as f:
+    for line in f:
+        try:
+            ADMINS.append(int(line))
+        except:
+            print("problems w/ 'admins.md' file parsing on " + str(line))
 
 @bot.message_handler(commands = ['listen'])
 def listen(message):
