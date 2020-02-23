@@ -2,3 +2,5 @@ config.py
 voices.json
 admins.json
 voices
+__pycache__
+.vscode
